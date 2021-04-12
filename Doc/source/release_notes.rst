@@ -13,6 +13,31 @@ contains more detail.
 0.2 Series
 ==========
 
+0.2.3 (2021-xx-xx)
+------------------
+
+New features
+************
+:mod:`~spacepy.pycdf` now supports variables with sparse records, including
+enabling/disabling sparse records (:meth:`~spacepy.pycdf.Var.sparse`) and
+setting the pad value (:meth:`~spacepy.pycdf.Var.pad`). Thanks Antoine Brunet.
+
+Deprecations and removals
+*************************
+The colourmaps provided in the :mod:`~spacepy.plot` module have been
+deprecated. The same colourmaps have been available in matplotlib since
+at least 1.5, and users who do not directly import the colourmaps should
+see no impact.
+
+
+Major bugfixes
+**************
+The passing of keyword arguments from :func:`~spacepy.toolbox.bootHisto`
+to :func:`numpy.histogram` and :func:`matplotlib.pyplot.bar` has been fixed.
+
+The check for out-of-date leapseconds in :mod:`~spacepy.time` has been
+fixed (previously warned even when the file was up to date.)
+
 0.2.2 (2020-12-29)
 ------------------
 

@@ -30,6 +30,7 @@ except: # Don't bring down whole test suite
     HAVE_ASTROPY = False
 import numpy
 
+import spacepy_testing
 import spacepy
 import spacepy.pycdf
 import spacepy.time as t
@@ -130,17 +131,13 @@ class TimeFunctionTests(unittest.TestCase):
                     [0, 0, 1],
                     [0, 0, 30],
                     [0, 59, 59])
-        with warnings.catch_warnings(record=True) as w:
-            warnings.filterwarnings(
-                'always', 'Number of seconds > seconds in day.*',
-                UserWarning, '^spacepy\\.time')
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'Number of seconds > seconds in day\. Try days keyword\.$',
+                UserWarning, r'spacepy\.time$'):
             for i, val in enumerate(inval):
                 ans = t.sec2hms(*val)
                 self.assertEqual(real_ans[i], ans)
-        self.assertEqual(1, len(w))
-        self.assertEqual(
-            'Number of seconds > seconds in day. Try days keyword.',
-            str(w[0].message))
         self.assertEqual(t.sec2hms(12, False, False, True), datetime.timedelta(seconds=12))
 
     def test_no_tzinfo(self):
@@ -696,6 +693,8 @@ class TimeFunctionTests(unittest.TestCase):
 
 class TimeClassTests(unittest.TestCase):
 
+    longMessage = True
+
     def test_TAIinit(self):
         """test that Ticktock can be made from TAI input"""
         t0 = 1663236947
@@ -1036,14 +1035,11 @@ class TimeClassTests(unittest.TestCase):
         t0 = 1663236947
         range_ex = list(numpy.linspace(t0, t0 + 4000, 4))
         # make a TAI that is a leapsecond time
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'now\(\) returns UTC time as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             tt2 = t.Ticktock.now()
-        self.assertEqual(1, len(w))
-        self.assertEqual(w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'now() returns UTC time as of 0.2.2.',
-            str(w[0].message))
         tt2tai = tt2.TAI
         taileaps = tt2.TAIleaps
         range_ex.append(taileaps[39] - 1)
@@ -1381,29 +1377,26 @@ class TimeClassTests(unittest.TestCase):
 
     def test_now(self):
         """now() is at least deterministic"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'now\(\) returns UTC time as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             v1 = t.Ticktock.now()
-            time.sleep(0.1)
+        time.sleep(0.1)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'now\(\) returns UTC time as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             v2 = t.Ticktock.now()
-        self.assertEqual(2, len(w))
-        for i in (0, 1):
-            self.assertEqual(w[i].category, DeprecationWarning)
-            self.assertEqual(
-                'now() returns UTC time as of 0.2.2.',
-                str(w[i].message))
         self.assertTrue(v1 < v2)
 
     def test_today(self):
         """today() has 0 time"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'today\(\) returns UTC day as of 0\.2\.2\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             v1 = t.Ticktock.today()
-        self.assertEqual(1, len(w))
-        self.assertEqual(w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'today() returns UTC day as of 0.2.2.',
-            str(w[0].message))
         self.assertEqual(v1.UTC[0].hour, 0)
         self.assertEqual(v1.UTC[0].minute, 0)
         self.assertEqual(v1.UTC[0].second, 0)
@@ -1511,6 +1504,25 @@ class TimeClassTests(unittest.TestCase):
         actual = [(int(y), int(m), int(d))
                   for y, m, d in zip(t.year, t.mon, t.day)][:14]
         numpy.testing.assert_equal(expected, actual)
+
+    def test_leapsgood(self):
+        """Test the check for out-of-date leapseconds"""
+        # Each case is current time, file mtime, lastleap, leapsgood (or not)
+        # Last leap must be july or january
+        cases = [[(2021, 1, 5), (2020, 12, 26), (2017, 1, 1), True],
+                 [(2021, 7, 5), (2020, 12, 26), (2017, 1, 1), False],
+                 [(2021, 7, 5), (2020, 12, 26), (2020, 7, 1), False],
+                 [(2021, 7, 5), (2020, 12, 26), (2021, 7, 1), True],
+                 [(2020, 12, 26), (2020, 12, 24), (2017, 1, 1), True],
+                 [(2018, 6, 2), (2018, 5, 12), (2017, 1, 1), True],
+                 [(2018, 6, 2), (2017, 5, 12), (2017, 1, 1), False],
+                 [(2017, 6, 2), (2017, 5, 12), (2017, 1, 1), True],
+                 ]
+        for caseno, caseinfo in enumerate(cases):
+            currtime, filetime, lastleap, isgood = caseinfo
+            self.assertEqual(isgood, t._leapsgood(
+                datetime.datetime(*currtime), datetime.datetime(*filetime),
+                datetime.datetime(*lastleap)), 'Case {}'.format(caseno))
 
     def test_diffAcrossLeaps(self):
         """Do TAI differences across the first leapsecond"""
@@ -1636,14 +1648,12 @@ class TimeClassTests(unittest.TestCase):
             datetime.datetime(2001, 1, 1),
             tt.UTC[0])
         tt.data[0] = '2002-01-01'
-        with warnings.catch_warnings(record=True) as w:
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'cls argument of update_items was deprecated in 0\.2\.2'
+                r' and will be ignored\.$',
+                DeprecationWarning, r'spacepy\.time$'):
             tt.update_items(type(tt), 'data')
-        self.assertEqual(1, len(w))
-        self.assertEqual(w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'cls argument of update_items was deprecated in 0.2.2'
-            ' and will be ignored.',
-            str(w[0].message))
         self.assertEqual(
             datetime.datetime(2002, 1, 1),
             tt.UTC[0])

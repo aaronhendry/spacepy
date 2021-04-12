@@ -30,6 +30,7 @@ from numpy import array
 from scipy import inf
 from scipy.stats import poisson
 
+import spacepy_testing
 import spacepy
 import spacepy.toolbox as tb
 import spacepy.lib
@@ -137,48 +138,32 @@ class SimpleFunctionTests(unittest.TestCase):
 
     def test_quaternionDeprecation(self):
         """Make sure deprecated quaternion functions work"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always', r'moved to spacepy\.coordinates',
+                DeprecationWarning, r'spacepy'):
             tst = tb.quaternionNormalize([0.707, 0, 0.707, 0.2])
-        self.assertEqual(1, len(w))
-        self.assertEqual(DeprecationWarning, w[0].category)
-        self.assertEqual(
-            'moved to spacepy.coordinates',
-            str(w[0].message))
         numpy.testing.assert_array_almost_equal(
             [0.693,  0.,  0.693,  0.196], tst, decimal=2)
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always', r'moved to spacepy\.coordinates',
+                DeprecationWarning, r'spacepy'):
             tst = tb.quaternionRotateVector([0.7071, 0, 0, 0.7071],
                                             [0, 1, 0])
-        self.assertEqual(1, len(w))
-        self.assertEqual(DeprecationWarning, w[0].category)
-        self.assertEqual(
-            'moved to spacepy.coordinates',
-            str(w[0].message))
         numpy.testing.assert_array_almost_equal(
             [0, 0, 1], tst, decimal=5)
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always', r'moved to spacepy\.coordinates',
+                DeprecationWarning, r'spacepy'):
             tst = tb.quaternionMultiply([1., 0, 0, 0],
                                         [0., 0, 0, 1], scalarPos='first')
-        self.assertEqual(1, len(w))
-        self.assertEqual(DeprecationWarning, w[0].category)
-        self.assertEqual(
-            'moved to spacepy.coordinates',
-            str(w[0].message))
         numpy.testing.assert_array_equal([0, 0, 0, 1], tst)
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(
+                self, 'always', r'moved to spacepy\.coordinates',
+                DeprecationWarning, r'spacepy'):
             tst = tb.quaternionConjugate([.707, 0, .707, 0.2])
-        self.assertEqual(1, len(w))
-        self.assertEqual(DeprecationWarning, w[0].category)
-        self.assertEqual(
-            'moved to spacepy.coordinates',
-            str(w[0].message))
         numpy.testing.assert_array_equal([-.707, 0, -.707, 0.2], tst)
 
     def test_indsFromXrange(self):
@@ -204,7 +189,7 @@ class SimpleFunctionTests(unittest.TestCase):
 
     def test_getNamedPath(self):
         """getNamedPath should have known result"""
-        curloc = os.path.dirname(os.path.abspath(__file__))
+        curloc = spacepy_testing.testsdir
         tmpdir = os.path.join(curloc, 'tmp', 'test1', 'test2')
         os.makedirs(tmpdir)
         ans = ['tests', 'tmp', 'test1']
@@ -373,31 +358,28 @@ class SimpleFunctionTests(unittest.TestCase):
         """feq should return true when they are equal"""
         val1 = 1.1234
         val2 = 1.1235
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(self, 'always', r'use numpy\.isclose',
+                                         DeprecationWarning, r'spacepy'):
             self.assertTrue(tb.feq(val1, val2, 0.0001))
+        with spacepy_testing.assertWarns(self, 'always', r'use numpy\.isclose',
+                                         DeprecationWarning, r'spacepy'):
             numpy.testing.assert_array_equal(
                 [False, True, False, False],
                 tb.feq([1., 2., 3., 4.],
                        [1.25, 2.05, 2.2, 500.1],
                        0.1)
             )
-        self.assertEqual(2, len(w))
-        for this_w in w:
-            self.assertEqual(DeprecationWarning, this_w.category)
-            self.assertEqual(DeprecationWarning, this_w.category)
-            self.assertEqual('use numpy.isclose', str(this_w.message))
 
     def testfeq_notequal(self):
         """feq should return false when they are not equal"""
         val1 = 1.1234
         val2 = 1.1235
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertWarns(self, 'always', r'use numpy\.isclose',
+                                         DeprecationWarning, r'spacepy'):
+            self.assertTrue(tb.feq(val1, val2, 0.0001))
+        with spacepy_testing.assertWarns(self, 'always', r'use numpy\.isclose',
+                                         DeprecationWarning, r'spacepy'):
             self.assertFalse(tb.feq(val1, val2, 0.000005))
-        self.assertEqual(1, len(w))
-        self.assertEqual(DeprecationWarning, w[0].category)
-        self.assertEqual('use numpy.isclose', str(w[0].message))
 
     def test_medAbsDev(self):
         """medAbsDev should return a known range for given random input"""
@@ -459,6 +441,25 @@ class SimpleFunctionTests(unittest.TestCase):
             ci_low, atol=2, rtol=1e-2)
         numpy.testing.assert_allclose(
             [12.,  56., 168., 307., 295., 181.,  85.,  14.,   0.,   5.],
+            ci_high, atol=2, rtol=1e-2)
+
+    def testBootHistoBins(self):
+        """Bootstrap histogram known output for known input, specify bins"""
+        numpy.random.seed(28420)
+        data = numpy.random.randn(1000)
+        bin_edges, ci_low, ci_high, sample = spacepy.toolbox.bootHisto(
+            data, n=1000, seed=28420, bins=numpy.arange(-5., 6.))
+        numpy.testing.assert_array_equal(
+            [-5., -4, -3, -2, -1, 0, 1, 2, 3, 4, 5],
+            bin_edges)
+        numpy.testing.assert_equal(
+            [  0,   2,  18, 143, 358, 328, 131,  18,   1,   1], sample)
+        #Chunk-check as above
+        numpy.testing.assert_allclose(
+            [ 0.,  0., 11.,  125.,  333.,  304.,  114., 11.,  0.,  0.],
+            ci_low, atol=2, rtol=1e-2)
+        numpy.testing.assert_allclose(
+            [ 0.,  5., 25.,  161.,  383.,  353.,  149., 25.,  3.,  3.],
             ci_high, atol=2, rtol=1e-2)
 
     def test_logspace(self):
@@ -528,8 +529,10 @@ class SimpleFunctionTests(unittest.TestCase):
 
     def test_pmm_object(self):
         """Test pmm handling of object arrays"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always')
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', 'pmm: Unable to exclude non-finite',
+                RuntimeWarning, 'spacepy.toolbox$')
             data = [array([5,9,23,24,6]).astype(object),
                     [datetime.datetime(2000, 3, 1, 0, 1), datetime.datetime(2000, 2, 28), datetime.datetime(2000, 3, 1)],
                     numpy.array(['foo', 'bar', 'baz'], dtype=object),
@@ -800,9 +803,7 @@ class SimpleFunctionTests(unittest.TestCase):
 
     def test_assemble_qindenton_daily(self):
         """Assemble OMNI data structure from Qin-Denton daily files"""
-        dailydir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            'data', 'qindenton_daily')
+        dailydir = os.path.join(spacepy_testing.datadir, 'qindenton_daily')
         omnidata = tb._assemble_qindenton_daily(dailydir)
         self.assertEqual(
             ['ByIMF', 'Bz1', 'Bz2', 'Bz3', 'Bz4', 'Bz5', 'Bz6', 'BzIMF',
@@ -983,7 +984,7 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean_outputTimes(self):
         '''windowMean should return a known set of output times for a given set of input times and windows'''
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(hours=1)
             olap = datetime.timedelta(0)
@@ -1010,7 +1011,7 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean1(self):
         """windowMean should give known results 1(regression)"""
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(hours=12)
@@ -1033,7 +1034,7 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean2(self):
         """windowMean should give known results 2(regression)"""
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(hours=12)
@@ -1055,7 +1056,7 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean3(self):
         """windowMean should give known results 3(regression)"""
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(hours=12)
@@ -1083,7 +1084,7 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean4(self):
         """windowMean should give known results 4(regression)"""
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(hours=12)
@@ -1099,8 +1100,9 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean5(self):
         """windowMean should give known results 5(regression)"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always')
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', r'windowmean\:', UserWarning, 'spacepy.toolbox$')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(hours=12)
             data = [10, 20]*50
@@ -1119,11 +1121,10 @@ class TBTimeFunctionTests(unittest.TestCase):
             od_ans, ot_ans = tb.windowMean(data, winsize=1.0, overlap=0)
             numpy.testing.assert_almost_equal(ot_ans, outtime)
             numpy.testing.assert_almost_equal(od_ans, outdata)
-            self.assertEqual(8, len(w))
 
     def test_windowMean_op(self):
         """windowMean should give known results (regression)"""
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(hours=12)
@@ -1145,7 +1146,7 @@ class TBTimeFunctionTests(unittest.TestCase):
 
     def test_windowMean_op2(self):
         """windowMean should give expected sums with len as passed function"""
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings():
             warnings.simplefilter('always')
             wsize = datetime.timedelta(days=1)
             olap = datetime.timedelta(0)

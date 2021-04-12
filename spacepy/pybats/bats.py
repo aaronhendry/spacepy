@@ -21,7 +21,7 @@ binary SWMF output files taylored to BATS-R-US-type data.
 import sys
 
 import numpy as np
-from spacepy.pybats import PbData, IdlFile, LogFile
+from spacepy.pybats import PbData, IdlFile, LogFile, calc_wrapper
 import spacepy.plot.apionly
 from spacepy.plot import set_target, applySmartTimeTicks
 from spacepy.datamodel import dmarray
@@ -34,6 +34,7 @@ mass = {'hp':1.0, 'op':16.0, 'he':4.0,
 RE = 6371000 # Earth radius in meters.
 
 #### Module-level functions:
+
 
 def _calc_ndens(obj):
     '''
@@ -86,13 +87,14 @@ def _calc_ndens(obj):
     rho = 'Rho'*('Rho' in obj) + 'rho'*('rho' in obj)
     
     # Find all species: the variable names end or begin with "rho".
+    # Take care not to double-count.
     for k in obj:
         # Ends with rho?
-        if (k[-3:] == rho) and (k!=rho) and (k[:-3]+'N' not in obj):
+        if (k[-3:] == rho) and (k != rho) and (k[:-3] + 'N' not in obj):
             species.append(k)
             names.append(k[:-3])
         # Begins with rho?
-        if (k[:3]  == rho) and (k!=rho) and (k[3:] +'N' not in obj):
+        if (k[:3] == rho) and (k != rho) and (k[3:] + 'N' not in obj):
             species.append(k)
             names.append(k[3:])
 
@@ -106,18 +108,18 @@ def _calc_ndens(obj):
                                               'amu mass':m})
 
     # Total N is sum of individual  number densities.
-    obj['N'] = dmarray(np.zeros(obj[rho].shape), 
-                       attrs={'units':'$cm^{-3}$'}) 
+    obj['N'] = dmarray(np.zeros(obj[rho].shape),
+                       attrs={'units':'$cm^{-3}$'})
     if species:
         # Total number density:
-        for n in names: obj['N']+=obj[n+'N']
+        for n in names: obj['N'] += obj[n+'N']
         # Composition as fraction of total per species:
         for n in names:
             obj[n+'Frac'] = dmarray(100.*obj[n+'N']/obj['N'],
                                     {'units':'Percent'})
     else:
         # No individual species => no composition, simple ndens.
-        obj['N'] += dmarray(obj[rho], attrs={'units':'$cm^{-3}$'}) 
+        obj['N'] += dmarray(obj[rho], attrs={'units':'$cm^{-3}$'})
 
 
 #### Classes:
@@ -137,11 +139,11 @@ class BatsLog(LogFile):
 
     def fetch_obs_dst(self):
         '''
-        Fetch the observed Dst index for the time period covered in the 
+        Fetch the observed Dst index for the time period covered in the
         logfile.  Return *True* on success.
 
         Observed Dst is automatically fetched from the Kyoto World Data Center
-        via the :mod:`spacepy.pybats.kyoto` module.  The associated 
+        via the :mod:`spacepy.pybats.kyoto` module.  The associated
         :class:`spacepy.pybats.kyoto.KyotoDst` object, which holds the observed
         Dst, is stored as *self.obs_dst* for future use.
         '''
@@ -152,7 +154,8 @@ class BatsLog(LogFile):
         if hasattr(self, 'obs_dst'): return True
 
         # Start and end time to collect observations:
-        stime = self['time'][0]; etime = self['time'][-1]
+        stime = self['time'][0]
+        etime = self['time'][-1]
 
         # Attempt to fetch from Kyoto website:
         try:
@@ -166,11 +169,11 @@ class BatsLog(LogFile):
 
     def fetch_obs_sym(self):
         '''
-        Fetch the observed SYM-H index for the time period covered in the 
+        Fetch the observed SYM-H index for the time period covered in the
         logfile.  Return *True* on success.
 
         Observed SYM-H is automatically fetched from the Kyoto World Data Center
-        via the :mod:`spacepy.pybats.kyoto` module.  The associated 
+        via the :mod:`spacepy.pybats.kyoto` module.  The associated
         :class:`spacepy.pybats.kyoto.KyotoSym` object, which holds the observed
         Dst, is stored as *self.obs_sym* for future use.
         '''
@@ -181,7 +184,8 @@ class BatsLog(LogFile):
         if hasattr(self, 'obs_sym'): return True
 
         # Start and end time to collect observations:
-        stime = self['time'][0]; etime = self['time'][-1]
+        stime = self['time'][0]
+        etime = self['time'][-1]
 
         # Attempt to fetch from Kyoto website:
         try:
@@ -198,26 +202,26 @@ class BatsLog(LogFile):
                           dstvar=None, obs_kwargs={'c':'k', 'ls':'--'},
                           **kwargs):
         '''
-        Create a quick-look plot of Dst (if variable present in file) 
+        Create a quick-look plot of Dst (if variable present in file)
         and compare against observations.
         
         Like all *add_\* * methods in Pybats, the *target* kwarg determines
         where to place the plot.
-        If kwarg *target* is **None** (default), a new figure is 
+        If kwarg *target* is **None** (default), a new figure is
         generated from scratch.  If *target* is a matplotlib Figure
         object, a new axis is created to fill that figure at subplot location
-        *loc* (defaults to 111).  If target is a matplotlib Axes object, 
+        *loc* (defaults to 111).  If target is a matplotlib Axes object,
         the plot is placed into that axis at subplot location *loc*.
 
         With newer versions of BATS-R-US, new dst-like variables are included,
         named 'dst', 'dst-sm', 'dstflx', etc.  This subroutine will attempt
-        to first use 'dst-sm' as it is calculated consistently with 
+        to first use 'dst-sm' as it is calculated consistently with
         observations.  If not found, 'dst' is used.  Users may choose which
         value to use via the *dstvar* kwarg.
 
-        Observed Dst and SYM-H is automatically fetched from the Kyoto World 
-        Data Center via the :mod:`spacepy.pybats.kyoto` module.  The associated 
-        :class:`spacepy.pybats.kyoto.KyotoDst` or 
+        Observed Dst and SYM-H is automatically fetched from the Kyoto World
+        Data Center via the :mod:`spacepy.pybats.kyoto` module.  The associated
+        :class:`spacepy.pybats.kyoto.KyotoDst` or
         :class:`spacepy.pybats.kyoto.KyotoSym` object, which holds the observed
         Dst/SYM-H, is stored as *self.obs_dst* for future use.
         The observed line can be customized via the *obs_kwargs* kwarg, which
@@ -241,10 +245,10 @@ class BatsLog(LogFile):
         if dstvar not in self:
             return None, None
 
-        fig, ax = set_target(target, figsize=(10,4), loc=loc)
+        fig, ax = set_target(target, figsize=(10, 4), loc=loc)
 
         if 'label' not in kwargs:
-            kwargs['label']='BATS-R-US $D_{ST}$ (Biot-Savart)'
+            kwargs['label'] = 'BATS-R-US $D_{ST}$ (Biot-Savart)'
 
         if 'label' not in obs_kwargs:
             obs_kwargs['label'] = 'Obs. Dst'
@@ -255,7 +259,7 @@ class BatsLog(LogFile):
                   'k', ':', label='_nolegend_')
         applySmartTimeTicks(ax, self['time'])
         ax.set_ylabel('D$_{ST}$ ($nT$)')
-        ax.set_xlabel('Time from '+ self['time'][0].isoformat()+' UTC')
+        ax.set_xlabel('Time from ' + self['time'][0].isoformat()+' UTC')
 
         # Add observations (Dst and/or SYM-H):
         if(plot_obs):
@@ -266,7 +270,7 @@ class BatsLog(LogFile):
         if(plot_sym):
             # Attempt to fetch SYM-h observations, plot if success.
             if self.fetch_obs_sym():
-                ax.plot(self.obs_sym['time'],self.obs_sym['sym-h'],**obs_kwargs)
+                ax.plot(self.obs_sym['time'], self.obs_sym['sym-h'], **obs_kwargs)
                 applySmartTimeTicks(ax, self['time'])
 
         # Place vertical line at epoch:
@@ -278,18 +282,18 @@ class BatsLog(LogFile):
                 
         # Apply legend
         if add_legend: ax.legend(loc='best')
-        if target==None: fig.tight_layout()
+        if target is None: fig.tight_layout()
         
         return fig, ax
     
 class Extraction(PbData):
     '''
     A class for creating and visualizing extractions from other
-    :class:`~spacepy.pybats.PbData` 2D data sets.  Bilinear interpolation is 
+    :class:`~spacepy.pybats.PbData` 2D data sets.  Bilinear interpolation is
     used to obtain data between points.  At present, this class only
     works with :class:`~spacepy.pybats.bats.Bats2d` objects, but will be
-    generalized in the future.  Though it can be instantiated in typical 
-    fashion, It is best to create these objects via other object methods (e.g., 
+    generalized in the future.  Though it can be instantiated in typical
+    fashion, It is best to create these objects via other object methods (e.g.,
     :func:`~spacepy.pybats.bats.Bats2d.extract`)
 
     Parameters
@@ -317,8 +321,8 @@ class Extraction(PbData):
         # If our x, y locations are not numpy arrays, fix that.
         # Additionally, convert scalars to 1-element vectors.
         x, y = np.array(x), np.array(y)
-        if not x.shape: x=x.reshape(1)
-        if not y.shape: y=y.reshape(1)
+        if not x.shape: x = x.reshape(1)
+        if not y.shape: y = y.reshape(1)
 
         # Default: all variables are extracted except coordinates.
         if var_list == 'all':
@@ -352,7 +356,7 @@ class Extraction(PbData):
         # Create data object for holding extracted values.
         # One vector for each value w/ same units as parent object.
         for v in self._var_list:
-            self[v]=dmarray(np.zeros(x.shape), attrs=data[v].attrs)
+            self[v] = dmarray(np.zeros(x.shape), attrs=data[v].attrs)
 
         # Some helpers:
         xAll = data[data['grid'].attrs['dims'][0]]
@@ -413,12 +417,12 @@ class Stream(Extraction):
     maxPoints : int
         (Default : 20000) Maximum number of integration steps to take.
     var_list : string or sequence of strings
-        (Default : 'all') List of values to extract from *dataset*.  
+        (Default : 'all') List of values to extract from *dataset*.
         Defaults to 'all', for all values within *bats*.
 
     Notes
     -----
-    .. Not really "notes" but need to keep this section from being parsed 
+    .. Not really "notes" but need to keep this section from being parsed
        as parameters
 
     .. rubric:: Methods
@@ -521,7 +525,8 @@ class Stream(Extraction):
 
         # Find starting block and set starting locations.
         block = bats.find_block(self.xstart, self.ystart)
-        xfwd=[self.xstart]; yfwd=[self.ystart]
+        xfwd = [self.xstart]
+        yfwd = [self.ystart]
         xnow, ynow = self.xstart, self.ystart
 
         # Trace forwards.
@@ -534,20 +539,20 @@ class Stream(Extraction):
             else:
                 loc = bats.qtree[block].locs
             # Trace through this block.
-            x, y = trc(bats[self.xvar][loc], bats[self.yvar][loc], 
-                       xnow, ynow, bats[grid[0]][loc][0,:], 
+            x, y = trc(bats[self.xvar][loc], bats[self.yvar][loc],
+                       xnow, ynow, bats[grid[0]][loc][0,:],
                        bats[grid[1]][loc][:,0], ds=0.01)
             # Update location and block:
             xnow, ynow = x[-1], y[-1]
             newblock = bats.find_block(xnow,ynow)
             # If we didn't leave the block, stop tracing.
             # Additionally, if inside rBody, stop.
-            if(block==newblock) or (xnow**2+ynow**2)<bats.attrs['rbody']*.8 :
-                block=False
+            if(block == newblock) or (xnow**2+ynow**2) < bats.attrs['rbody'] * .8 :
+                block = False
             elif newblock:
-                block=newblock
+                block = newblock
             else:
-                block=False
+                block = False
             # Append to full trace vectors.
             xfwd = np.append(xfwd, x[1:])
             yfwd = np.append(yfwd, y[1:])
@@ -555,33 +560,34 @@ class Stream(Extraction):
             # It's possible to get stuck swirling around across
             # a few blocks.  If we spend a lot of time tracing,
             # call it quits.
-            if xfwd.size>maxPoints: block=False
+            if xfwd.size > maxPoints: block = False
 
         # Trace backwards.  Same Procedure as above.
         block = bats.find_block(self.xstart, self.ystart)
-        xbwd=[self.xstart]; ybwd=[self.ystart]
+        xbwd = [self.xstart]
+        ybwd = [self.ystart]
         xnow, ynow = self.xstart, self.ystart
         while(block):
             if hasattr(bats.qtree[block], 'ghost'):
                 loc = bats.qtree[block].ghost
             else:
                 loc = bats.qtree[block].locs
-            x, y = trc(bats[self.xvar][loc], bats[self.yvar][loc], 
-                       xnow, ynow, bats[grid[0]][loc][0,:], 
-                       bats[grid[1]][loc][:,0], ds=-0.01)
+            x, y = trc(bats[self.xvar][loc], bats[self.yvar][loc],
+                       xnow, ynow, bats[grid[0]][loc][0, :],
+                       bats[grid[1]][loc][:, 0], ds=-0.01)
             xnow, ynow = x[-1], y[-1]
-            newblock = bats.find_block(xnow,ynow)
-            if(block==newblock) or (xnow**2+ynow**2)<bats.attrs['rbody']*.8 :
-                block=False
+            newblock = bats.find_block(xnow, ynow)
+            if(block == newblock) or (xnow**2+ynow**2) < bats.attrs['rbody'] * .8:
+                block = False
             elif newblock:
-                block=newblock
+                block = newblock
             else:
-                block=False
+                block = False
             # Append to full trace vectors.
             xbwd = np.append(x[::-1], xbwd)
             ybwd = np.append(y[::-1], ybwd)
-            if xbwd.size>maxPoints: 
-                block=False
+            if xbwd.size > maxPoints:
+                block = False
 
         # Trim duplicate points created when backwards tracing.
         # There's always at least 1 duplicate.
@@ -589,15 +595,15 @@ class Stream(Extraction):
             if xbwd[-(i+1)]-xfwd[0] != 0: break
         
         # Combine foward and backward traces.
-        self.x = np.append(xbwd[:-i],xfwd)
-        self.y = np.append(ybwd[:-i],yfwd)
+        self.x = np.append(xbwd[:-i], xfwd)
+        self.y = np.append(ybwd[:-i], yfwd)
 
         # If planetary run w/ body:
         # 1) Check if line is closed to body.
         # 2) Trim points within body.
         if 'rbody' in bats.attrs:
             # Radial distance:
-            r = sqrt(self.x**2.0  + self.y**2.0)
+            r = sqrt(self.x**2.0 + self.y**2.0)
             # Closed field line?  Lobe line?  Set status:
             if (r[0] < bats.attrs['rbody']) and (r[-1] < bats.attrs['rbody']):
                 self.open   = False
@@ -610,7 +616,7 @@ class Stream(Extraction):
                 self.status = 'south lobe'
             # Trim the fat!
             limit = bats.attrs['rbody']*.8
-            self.x, self.y = self.x[r>limit], self.y[r>limit]
+            self.x, self.y = self.x[r > limit], self.y[r > limit]
 
     def trace(self, bats):
         '''
@@ -640,40 +646,119 @@ class Stream(Extraction):
 
         # Check if line is closed to body.
         if 'rbody' in bats.attrs:
-            r1 = sqrt(self.x[0]**2.0  + self.y[0]**2.0)
+            r1 = sqrt(self.x[ 0]**2.0 + self.y[0]**2.0)
             r2 = sqrt(self.x[-1]**2.0 + self.y[-1]**2.0)
             if (r1 < bats.attrs['rbody']) and (r2 < bats.attrs['rbody']):
                 self.open = False
 
     def plot(self, ax, *args, **kwargs):
         '''
-        Add streamline to axes object "ax". 
+        Add streamline to axes object "ax".
         '''
         ax.plot(self.x, self.y, self.style, *args, **kwargs)
 
+
 class Bats2d(IdlFile):
     '''
-    A child class of :class:`~pybats.IdlFile` taylored to BATS-R-US output.
+    A child class of :class:`~pybats.IdlFile` tailored to 2D BATS-R-US output.
+
+    Calculations
+    ------------
+    New values can be added via the addition of new keys.  For example, 
+    a user could add radial distance to an equatorial Bats2d object as follows:
+
+    >>> import numpy as np
+    >>> from spacepy.pybats import bats
+    >>> mhd = bats.Bats2d('z=0_example.out')
+    >>> mhd['rad'] = np.sqrt( mhd['x']**2 + mhd['y']**2 )
+
+    Note, however, that if the user switches the data frame in a *.outs file
+    to access data from a different epoch, these values will need to be
+    updated.
+
+    An exception to this is built-in `calc_*` methods, which perform common
+    MHD/fluid dynamic calculations (i.e., Alfven wave speed, vorticity, and
+    more.)  These values are updated when the data frame is switched (see the
+    `switch_frame` method).
+
+    Plotting
+    --------
+    While users can employ Matplotlib to plot values, a set of built-in
+    methods are available to expedite plotting.  These are the
+    `add_<plot type>` methods.  These methods always have the following
+    keyword arguments that allow users to optionally build more complicated
+    plots: *target* and *loc*.  The *target* kwarg tells the plotting method
+    where to place the plot and can either be a Matplotlib figure or axes
+    object.  If it's an axes object, *loc* sets the subplot location using
+    the typical matplotlib syntax (e.g., `loc=121`).  The default behavior is
+    to create a new figure and axes object.
+
+    This approach allows a user to over-plot contours, field lines, and
+    other plot artists as well as combine different subplots onto a single
+    figure.  Continuing with our example above, let's plot the grid layout
+    for our file as well as equatorial pressure and flow streamlines:
+
+    >>> import matplotlib.pyplot as plt
+    >>> fig = plt.Figure(figsize=(8,6))
+    >>> mhd.add_grid_plot(target=fig, loc=121)
+    >>> mhd.add_contour('x','y','p', target=fig, loc=122)
+    >>> mhd.add_stream_scatter('ux', 'uy', target=fig, loc=122)
+
+    Useful plotting methods include the following:
+
+    | Plot Method        | Description                                    |
+    | ------------------ | ---------------------------------------------- |
+    | add_grid_plot      | Create a quick-look diagram of the grid layout |
+    | add_contour        | Create a contour plot of a given variable      |
+    | add_pcolor         | Add a p-color (no-interpolation contour) plot  |
+    | add_stream_scatter | Scatter stream traces (any vector field)       |
+    | add_b_magsphere    | Add magnetic field lines for X-Z plane cuts    |
+    | add_planet         | Add a simple black/white planet at the origin  |
+    | add_body           | Add an inner boundary at the origin            |
+
+    Extracting and Stream Tracing
+    -----------------------------
+    Extracting values via interpolation to arbitrary points and creating
+    stream traces through any vector field (e.g., velocity or magnetic field)
+    are aided via the use of the following object methods:
+
+    | Method     | Description                                        |
+    | ---------- | -------------------------------------------------- |
+    | extract    | Interpolate to arbitrary points and extract values |
+    | get_stream | Integrate stream lines through vector fields       |
+
+
+    Be sure to read the docstring information of :class:`~pybats.IdlFile` to
+    see how to handle multi-frame files (*.outs) and for a list of critical
+    attributes.
+    
     '''
     # Init by calling IdlFile init and then building qotree, etc.
-    def __init__(self, filename, format='binary'):
+    def __init__(self, filename, *args, **kwargs):
 
-        from spacepy.pybats import parse_filename_time
+        # Create quad tree object attribute:
+        self._qtree = None
         
         # Read file.
-        IdlFile.__init__(self, filename, format=format, keep_case=False)
-
-        self._qtree=None
-
-        # Extract time from file name:
-        i_iter, runtime, time = parse_filename_time(self.attrs['file'])
-        if 'time' not in self.attrs: self.attrs['time'] = time
-        if 'iter' not in self.attrs: self.attrs['iter'] = i_iter
-
+        IdlFile.__init__(self, filename, keep_case=False, *args, **kwargs)
+        
         # Behavior of output files changed Jan. 2017:
         # Check for 'r' instead of 'rbody' in attrs.
         if 'r' in self.attrs and 'rbody' not in self.attrs:
             self.attrs['rbody'] = self.attrs['r']
+
+    def switch_frame(self, *args, **kwargs):
+        '''
+        For files that have more than one data frame (i.e., `*.outs` files),
+        load data from the *iframe*-th frame into the object replacing what is
+        currently loaded.
+        '''
+
+        # Reset our quad tree before reading our file:
+        self._qtree = None
+        
+        # Switch frames using parent method:
+        super(Bats2d, self).switch_frame(*args, **kwargs)
         
     @property
     def qtree(self):
@@ -687,16 +772,15 @@ class Bats2d(IdlFile):
             if self['grid'].attrs['gtype'] != 'Regular':
                 xdim, ydim = self['grid'].attrs['dims'][0:2]
                 try:
-                    self._qtree=qo.QTree(array([self[xdim],self[ydim]]))
+                    self._qtree = qo.QTree(array([self[xdim], self[ydim]]))
                 except:
                     from traceback import print_exc
                     print_exc()
-                    #print 'On dataset:',self.filename
-                    self._qtree=False
-                    self.find_block=lambda: False
+                    self._qtree = False
+                    self.find_block = lambda: False
             else:
-                self._qtree=False
-                self.find_block=lambda: False
+                self._qtree = False
+                self.find_block = lambda: False
 
         return self._qtree
 
@@ -711,6 +795,7 @@ class Bats2d(IdlFile):
     # CALCULATIONS
     ####################
 
+    @calc_wrapper
     def calc_temp(self, units='eV'):
         '''
         Calculate plasma temperature for each fluid.  Number density is
@@ -733,7 +818,7 @@ class Bats2d(IdlFile):
                  'k'  : 72429626.47} # nPa/cm^3 --> K.
 
         # Calculate number density if not done already.
-        if not 'N' in self:
+        if 'N' not in self:
             self.calc_ndens()
         
         # Find all number density variables.
@@ -746,8 +831,9 @@ class Bats2d(IdlFile):
                 continue
             self[key[:-1]+'t'] = dmarray(
                 conv[units] * self[key[:-1]+'p']/self[key],
-                attrs = {'units':units})
+                attrs={'units':units})
 
+    @calc_wrapper
     def calc_b(self):
         '''
         Calculates total B-field strength using all three B components.
@@ -757,16 +843,17 @@ class Bats2d(IdlFile):
         from numpy import sqrt
 
         self['b'] = sqrt(self['bx']**2.0 + self['by']**2.0 + self['bz']**2.0)
-        self['b'].attrs={'units':self['bx'].attrs['units']}
+        self['b'].attrs = {'units':self['bx'].attrs['units']}
 
         self['bx_hat'] = self['bx'] / self['b']
         self['by_hat'] = self['by'] / self['b']
         self['bz_hat'] = self['bz'] / self['b']
 
-        self['bx_hat'].attrs={'units':'unitless'}
-        self['by_hat'].attrs={'units':'unitless'}
-        self['bz_hat'].attrs={'units':'unitless'}
+        self['bx_hat'].attrs = {'units':'unitless'}
+        self['by_hat'].attrs = {'units':'unitless'}
+        self['bz_hat'].attrs = {'units':'unitless'}
 
+    @calc_wrapper
     def calc_j(self):
         '''
         Calculates total current density strength using all three J components.
@@ -775,40 +862,41 @@ class Bats2d(IdlFile):
         from numpy import sqrt
 
         self['j'] = sqrt(self['jx']**2.0 + self['jy']**2.0 + self['jz']**2.0)
-        self['j'].attrs={'units':self['jx'].attrs['units']}
-        
+        self['j'].attrs = {'units':self['jx'].attrs['units']}
+    
+    @calc_wrapper
     def calc_E(self):
         '''
         Calculates the MHD electric field, -UxB.  Works for default
         MHD units of nT and km/s; if these units are not correct, an 
         exception will be raised.  Stores E in mV/m.
         '''
-        from copy import copy
 
         # Some quick declarations for more readable code.
         ux = self['ux']; uy=self['uy']; uz=self['uz']
         bx = self['bx']; by=self['by']; bz=self['bz']
 
         # Check units.  Should be nT(=Volt*s/m^2) and km/s.
-        if (bx.attrs['units']!='nT') or (ux.attrs['units']!='km/s'):
+        if (bx.attrs['units'] != 'nT') or (ux.attrs['units'] != 'km/s'):
             raise Exception('Incorrect units!  Should be km/s and nT.')
 
         # Calculate; return in millivolts per meter
         self['Ex'] = -1.0*(uy*bz - uz*by) / 1000.0
         self['Ey'] = -1.0*(uz*bx - ux*bz) / 1000.0
         self['Ez'] = -1.0*(ux*by - uy*bx) / 1000.0
-        self['Ex'].attrs={'units':'mV/m'}
-        self['Ey'].attrs={'units':'mV/m'}
-        self['Ez'].attrs={'units':'mV/m'}
+        self['Ex'].attrs = {'units':'mV/m'}
+        self['Ey'].attrs = {'units':'mV/m'}
+        self['Ez'].attrs = {'units':'mV/m'}
 
         # Total magnitude.
         self['E'] = np.sqrt(self['Ex']**2+self['Ey']**2+self['Ez']**2)
         
+    @calc_wrapper
     def calc_ndens(self):
         '''
-        Calculate number densities for each fluid.  Species mass is ascertained 
+        Calculate number densities for each fluid.  Species mass is ascertained
         via recognition of fluid name (e.g. OpRho is clearly oxygen).  A full
-        list of recognized fluids/species can be found by exploring the 
+        list of recognized fluids/species can be found by exploring the
         dictionary *mass* found in :mod:`~spacepy.pybats.bats`.  Composition is
         also calculated as percent of total number density.
 
@@ -818,10 +906,11 @@ class Bats2d(IdlFile):
 
         # Use shared function.
         _calc_ndens(self)
-                                
+
+    @calc_wrapper
     def calc_beta(self):
         '''
-        Calculates plasma beta (ratio of plasma to magnetic pressure, 
+        Calculates plasma beta (ratio of plasma to magnetic pressure,
         indicative of who - plasma or B-field - is "in charge" with regards
         to flow.
         Assumes:
@@ -832,16 +921,16 @@ class Bats2d(IdlFile):
         '''
         from numpy import pi
 
-        if not 'b' in self:
+        if 'b' not in self:
             self.calc_b()
-        mu_naught = 4.0E2 * pi # Mu_0 x unit conversion (nPa->Pa, nT->T)
+        mu_naught = 4.0E2 * pi  # Mu_0 x unit conversion (nPa->Pa, nT->T)
         temp_b = self['b']**2.0
-        temp_b[temp_b<1E-8] =  -1.0*mu_naught*self['p'][temp_b==0.0]
-        temp_beta=mu_naught*self['p']/temp_b
-        #temp_beta[self['b']<1E-9] = -1.0
-        self['beta']=temp_beta
-        self['beta'].attrs={'units':'unitless'}
+        temp_b[temp_b < 1E-8] = -1.0*mu_naught*self['p'][temp_b == 0.0]
+        temp_beta = mu_naught*self['p']/temp_b
+        self['beta'] = temp_beta
+        self['beta'].attrs = {'units':'unitless'}
 
+    @calc_wrapper
     def calc_jxb(self):
         '''
         Calculates the JxB force assuming:
@@ -854,26 +943,27 @@ class Bats2d(IdlFile):
         # Unit conversion (nT, uA, cm^-3 -> nT, A, m^-3) to nN/m^3.
         conv = 1E-6
         # Calculate cross product, convert units.
-        self['jbx']=dmarray( (self['jy']*self['bz']-self['jz']*self['by'])*conv,
-                             {'units':'nN/m^3'})
-        self['jby']=dmarray( (self['jz']*self['bx']-self['jx']*self['bz'])*conv,
-                             {'units':'nN/m^3'})
-        self['jbz']=dmarray( (self['jx']*self['by']-self['jy']*self['bx'])*conv,
-                             {'units':'nN/m^3'})
-        self['jb'] =dmarray( sqrt(self['jbx']**2 +
+        self['jbx'] = dmarray((self['jy']*self['bz']-self['jz']*self['by'])*conv,
+                              {'units':'nN/m^3'})
+        self['jby'] = dmarray((self['jz']*self['bx']-self['jx']*self['bz'])*conv,
+                              {'units':'nN/m^3'})
+        self['jbz'] = dmarray((self['jx']*self['by']-self['jy']*self['bx'])*conv,
+                              {'units':'nN/m^3'})
+        self['jb'] = dmarray(sqrt(self['jbx']**2 +
                                   self['jby']**2 +
                                   self['jbz']**2), {'units':'nN/m^3'})
 
+    @calc_wrapper
     def calc_alfven(self):
         '''
-        Calculate the Alfven speed, B/(mu*rho)^(1/2) in km/s.  This is performed
-        for each species and the total fluid.
+        Calculate the Alfven speed, B/(mu*rho)^(1/2) in km/s.  This is
+        performed for each species and the total fluid.
         The variable is saved under key "alfven" in self.data.
         '''
         from numpy import sqrt, pi
         from spacepy.datamodel import dmarray
         
-        if not 'b' in self:
+        if 'b' not in self:
             self.calc_b()
         #M_naught * conversion from #/cm^3 to kg/m^3
         mu_naught = 4.0E-7 * pi * 1.6726E-27 * 1.0E6
@@ -887,13 +977,14 @@ class Bats2d(IdlFile):
         # Calculate Alfven speed in km/s.  Separate step to avoid
         # changing dictionary while looping over keys.
         for k in rho_names:
-            self[k[:-3]+'alfven'] = dmarray(self['b']*1E-12 / 
+            self[k[:-3]+'alfven'] = dmarray(self['b']*1E-12 /
                                             sqrt(mu_naught*self[k]),
                                             attrs={'units':'km/s'})
-
+    
+    @calc_wrapper
     def _calc_divmomen(self):
         '''
-        Calculate the divergence of momentum, i.e. 
+        Calculate the divergence of momentum, i.e.
         $\rho(u \dot \nabla)u$.
         This is currently exploratory.
         '''
@@ -901,7 +992,7 @@ class Bats2d(IdlFile):
         from spacepy.datamodel import dmarray
         from spacepy.pybats.batsmath import d_dx, d_dy
 
-        if self.qtree==False:
+        if self.qtree == False:
             raise ValueError('calc_divmomen requires a valid qtree')
         
         # Create empty arrays to hold new values.
@@ -910,9 +1001,9 @@ class Bats2d(IdlFile):
         self['divmomz'] = dmarray(np.zeros(size), {'units':'nN/m3'})
 
         # Units!
-        c1 = 1000./6371.0 # km2/Re/s2 -> m/s2
-        c2 = 1.6726E-21   # AMU/cm3 -> kg/m3
-        c3 = 1E9          # N/m3 -> nN/m3.
+        c1 = 1000. / 6371.0  # km2/Re/s2 -> m/s2
+        c2 = 1.6726E-21      # AMU/cm3 -> kg/m3
+        c3 = 1E9             # N/m3 -> nN/m3.
 
         for k in self.qtree:
             # Calculate only on leafs of quadtree.
@@ -920,20 +1011,21 @@ class Bats2d(IdlFile):
             
             # Extract values from current leaf.
             leaf = self.qtree[k]
-            ux   = self['ux'][leaf.locs]
-            uz   = self['uz'][leaf.locs]
+            ux = self['ux'][leaf.locs]
+            uz = self['uz'][leaf.locs]
 
-            self['divmomx'][leaf.locs]=ux*d_dx(ux, leaf.dx)+uz*d_dy(ux, leaf.dx)
-            self['divmomz'][leaf.locs]=ux*d_dx(uz, leaf.dx)+uz*d_dy(uz, leaf.dx)
+            self['divmomx'][leaf.locs] = ux*d_dx(ux, leaf.dx)+uz*d_dy(ux, leaf.dx)
+            self['divmomz'][leaf.locs] = ux*d_dx(uz, leaf.dx)+uz*d_dy(uz, leaf.dx)
 
         # Unit conversion.
-        self['divmomx']*=self['rho']*c1*c2*c3
-        self['divmomz']*=self['rho']*c1*c2*c3
+        self['divmomx'] *= self['rho']*c1*c2*c3
+        self['divmomz'] *= self['rho']*c1*c2*c3
 
+    @calc_wrapper
     def calc_vort(self, conv=1000./RE):
         '''
         Calculate the vorticity (curl of bulk velocity) for the direction
-        orthogonal to the cut plane.  For example, if output file is 
+        orthogonal to the cut plane.  For example, if output file is
         a cut in the equatorial plane (GSM X-Y plane), only the z-component
         of the curl is calculated.
 
@@ -947,16 +1039,15 @@ class Bats2d(IdlFile):
         Other Parameters
         ================
         conv : float
-           Required unit conversion such that output units are 1/s.  
-           Defaults to 1/RE (in km), which assumes grid is in RE and 
+           Required unit conversion such that output units are 1/s.
+           Defaults to 1/RE (in km), which assumes grid is in RE and
            velocity is in km/s.
         '''
 
         from spacepy.pybats.batsmath import d_dx, d_dy
 
-        if self.qtree==False:
+        if self.qtree is False:
             raise ValueError('calc_vort requires a valid qtree')
-
 
         # Determine which direction to calculate based on what direction
         # is not present.  Save appropriate derivative operators, order
@@ -975,7 +1066,6 @@ class Bats2d(IdlFile):
             dim1, dim2 = 'x', 'y'
             dx1,  dx2  = d_dy, d_dx
 
-        
         # Create new arrays to hold curl.
         size = self['ux'].shape
         self[w] = dmarray(np.zeros(size), {'units':'1/s'})
@@ -986,14 +1076,14 @@ class Bats2d(IdlFile):
             if not self.qtree[k].isLeaf: continue
 
             # Get location of points and extract velocity:
-            leaf=self.qtree[k]
-            u1=self['u'+dim1][leaf.locs]
-            u2=self['u'+dim2][leaf.locs]
+            leaf = self.qtree[k]
+            u1 = self['u'+dim1][leaf.locs]
+            u2 = self['u'+dim2][leaf.locs]
 
             # Calculate curl
             self[w][leaf.locs] = conv * (dx1(u1, leaf.dx) - dx2(u2, leaf.dx))
         
-        
+    @calc_wrapper
     def calc_gradP(self):
         '''
         Calculate the pressure gradient force.
@@ -1002,7 +1092,7 @@ class Bats2d(IdlFile):
         from spacepy.datamodel import dmarray
         from spacepy.pybats.batsmath import d_dx, d_dy
 
-        if self.qtree==False:
+        if self.qtree is False:
             raise ValueError('calc_gradP requires a valid qtree')
 
         if 'p' not in self:
@@ -1020,8 +1110,8 @@ class Bats2d(IdlFile):
             if not self.qtree[k].isLeaf: continue
 
             # Extract leaf; place pressure into 2D array.
-            leaf=self.qtree[k]
-            z=self['p'][leaf.locs]
+            leaf = self.qtree[k]
+            z = self['p'][leaf.locs]
             
             # Calculate derivatives; place into new dmarrays.
             # Unit conversion: P in nPa => gradP in nN/m3, dx=Re
@@ -1032,12 +1122,12 @@ class Bats2d(IdlFile):
             self['gradP_'+dims[0]][leaf.locs] = d_dx(z, leaf.dx)*conv
             self['gradP_'+dims[1]][leaf.locs] = d_dy(z, leaf.dx)*conv
 
-        
         # Scalar magnitude:
         for d in dims:
             self['gradP'] += self['gradP_'+d]**2
         self['gradP'] = np.sqrt(self['gradP'])
 
+    @calc_wrapper
     def calc_utotal(self):
         '''
         Calculate bulk velocity magnitude: $u^2 = u_X^2 + u_Y^2 + u_Z^2$.
@@ -1057,14 +1147,15 @@ class Bats2d(IdlFile):
         units = self['ux'].attrs['units']
 
         for s in species:
-            self[s+'u'] = dmarray(sqrt( self[s+'ux']**2+
-                                        self[s+'uy']**2+
-                                        self[s+'uz']**2), 
+            self[s+'u'] = dmarray(sqrt(self[s+'ux']**2 +
+                                       self[s+'uy']**2 +
+                                       self[s+'uz']**2),
                                   attrs={'units':units})
 
+    @calc_wrapper
     def _calc_Ekin(self, units='eV'):
         '''
-        Calculate average kinetic energy per particle using 
+        Calculate average kinetic energy per particle using
         $E=\frac{1}{2}mv^2$.  Note that this is not the same as energy
         density.  Units are $eV$.
         '''
@@ -1073,23 +1164,22 @@ class Bats2d(IdlFile):
 
         raise Warning("This calculation is unverified.")
         
-        conv =  0.5 * 0.0103783625 # km^2-->m^2, amu-->kg, J-->eV.
+        conv = 0.5 * 0.0103783625  # km^2-->m^2, amu-->kg, J-->eV.
         if units.lower == 'kev':
-            conv=conv/1000.0
+            conv = conv/1000.0
 
         species = []
 
         # Find all species, the variable names end in "rho".
         for k in self:
-            #and (k!='rho') \
             if (k[-3:] == 'rho') and (k[:-3]+'Ekin' not in self):
                 species.append(k[:-3])
 
         for s in species:
             #THIS IS WRONG HERE: 1/2mV**2?  Notsomuch.
-            self[s+'Ekin'] = dmarray(sqrt( self[s+'ux']**2+
-                                           self[s+'uy']**2+
-                                           self[s+'uz']**2)
+            self[s+'Ekin'] = dmarray(sqrt(self[s+'ux']**2 +
+                                          self[s+'uy']**2 +
+                                          self[s+'uz']**2)
                                      * conv * mass[s.lower()],
                                      attrs={'units':units})
 
@@ -1115,8 +1205,8 @@ class Bats2d(IdlFile):
     def gradP_regular(self, cellsize=None, dim1range=-1, dim2range=-1):
         '''
         Calculate pressure gradient on a regular grid.
-        Note that if the Bats2d object is not on a regular grid, one of 
-        two things will happen.  If kwarg cellsize is set, the value of 
+        Note that if the Bats2d object is not on a regular grid, one of
+        two things will happen.  If kwarg cellsize is set, the value of
         cellsize will be used to call self.regrid and the object will
         be regridded using a cellsize of cellsize.  Kwargs dim1range and
         dim2range can be used in the same way they are used in self.regrid
@@ -1128,7 +1218,7 @@ class Bats2d(IdlFile):
         are force density (N/m^3).  Three variables are added to self.data:
         gradp(dim1), gradp(dim2), gradp.  For example, if the object is an
         equatorial cut, the variables gradpx, gradpy, and gradp would be
-        added representing the gradient in each direction and then the 
+        added representing the gradient in each direction and then the
         magnitude of the vector.
         '''
         from numpy import gradient, sqrt
@@ -2491,7 +2581,7 @@ class ShellSlice(IdlFile):
         self.phi   = d2r*self.lon
         self.theta = d2r*(90-self.lat)
 
-        
+    @calc_wrapper
     def calc_urad(self):
         '''
         Calculate radial velocity.
@@ -2503,6 +2593,7 @@ class ShellSlice(IdlFile):
 
         self['ur'] = dmarray(ur, {'units':self['ux'].attrs['units']})
 
+    @calc_wrapper
     def calc_radflux(self, var, conv=1000. * (100.0)**3):
         '''
         For variable *var*, calculate the radial flux of *var* through each
@@ -2518,6 +2609,7 @@ class ShellSlice(IdlFile):
         # Calc flux:
         self[var+'_rflx'] = self[var] * self['ur'] * conv
 
+    @calc_wrapper
     def calc_radflu(self, var):
         '''
         For variable *var*, calculate the radial fluence, or the 
@@ -2773,7 +2865,7 @@ class Mag(PbData):
         for key in list(self.keys()):
             if key in varmap:
                 self[ varmap[key] ] = self.pop(key)
-            
+
     def calc_h(self):
         '''
         Calculate the total horizontal perturbation, 'H', using the pythagorean
@@ -3228,7 +3320,8 @@ class MagGridFile(IdlFile):
         #if coord == 'GEO':
         #    self['Lat_geo']=self['Lat']
         #    self['Lon_geo']=self['Lon']
-                
+
+    @calc_wrapper                
     def calc_h(self):
         '''
         Calculate the total horizontal perturbation, 'h', using the pythagorean

@@ -31,6 +31,7 @@ import warnings
 import matplotlib.dates
 import numpy
 import numpy.testing
+import spacepy_testing
 from spacepy import datamodel
 import spacepy.pycdf as cdf
 import spacepy.pycdf.const as const
@@ -500,7 +501,7 @@ class NoCDF(unittest.TestCase):
                    -1 * 2 ** 31,
                    numpy.array([5, 6, 7], dtype=numpy.uint8),
                    [4611686018427387904],
-                   numpy.array([1], dtype=numpy.object),
+                   numpy.array([1], dtype=object),
                    ]
         type8 = [((4,), [const.CDF_BYTE, const.CDF_INT1, const.CDF_UINT1,
                          const.CDF_INT2, const.CDF_UINT2,
@@ -609,9 +610,11 @@ class NoCDF(unittest.TestCase):
 
     def testMinMaxFloat(self):
         """Get min/max values for a float"""
-        with warnings.catch_warnings(record=True) as w:
+        with spacepy_testing.assertDoesntWarn(
+                self, 'always',
+                r'Conversion of the second argument of issubdtype',
+                FutureWarning, r'spacepy'):
             minval, maxval = cdf.lib.get_minmax(const.CDF_FLOAT)
-        self.assertEqual(0, len(w)) #make sure no deprecation warning
         self.assertAlmostEqual(-3.4028234663853e+38, minval, places=-30)
         self.assertAlmostEqual(3.4028234663853e+38, maxval, places=-30)
 
@@ -690,8 +693,8 @@ class MakeCDF(unittest.TestCase):
     def setUp(self):
         self.testdir = tempfile.mkdtemp()
         self.testfspec = os.path.join(self.testdir, 'foo.cdf')
-        pth = os.path.dirname(os.path.abspath(__file__))
-        self.testmaster = os.path.join(pth, 'po_l1_cam_testc.cdf')
+        self.testmaster = os.path.join(spacepy_testing.testsdir,
+                                       'po_l1_cam_testc.cdf')
 
     def tearDown(self):
         shutil.rmtree(self.testdir)
@@ -1066,26 +1069,13 @@ class MakeCDF(unittest.TestCase):
         # set_backward has not been called.
         cdf.lib = cdf.Library(libpath=cdf.lib, library=cdf._library)
         self.assertFalse(cdf.lib._explicit_backward)
-        with warnings.catch_warnings(record=True) as w:
-            if sys.version_info[0:2] == (2, 7)\
-               and hasattr(cdf, '__warningregistry__'):
-                # filter 'always' is broken in Python 2.7
-                # https://stackoverflow.com/questions/56821539/
-                for k in cdf.__warningregistry__.keys():
-                    if k[0].startswith(
-                            'spacepy.pycdf.lib.set_backward not called') \
-                            and k[1] is DeprecationWarning:
-                        del cdf.__warningregistry__[k]
-                        break
-            warnings.simplefilter('always')
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'spacepy\.pycdf\.lib\.set_backward not called\; making'
+                r' backward-compatible CDF\. This default will change in the'
+                r' future\.$',
+                DeprecationWarning, r'spacepy\.pycdf$'):
             cdf.CDF(self.testfspec, create=True).close()
-        self.assertEqual(1, len(w))
-        self.assertEqual(
-            w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'spacepy.pycdf.lib.set_backward not called; making'
-            ' backward-compatible CDF. This default will change in the future.',
-            str(w[0].message))
         with cdf.CDF(self.testfspec) as f:
             ver, rel, inc = f.version()
         self.assertEqual(2, ver) # Still the default
@@ -1097,10 +1087,10 @@ class MakeCDF(unittest.TestCase):
         cdf.lib = cdf.Library(libpath=cdf.lib, library=cdf._library)
         self.assertFalse(cdf.lib._explicit_backward)
         cdf.lib.set_backward(True)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always')
+        with spacepy_testing.assertDoesntWarn(
+                self, 'always', category=DeprecationWarning,
+                module=r'spacepy\.pycdf$'):
             cdf.CDF(self.testfspec, create=True).close()
-        self.assertEqual(0, len(w))
         with cdf.CDF(self.testfspec) as f:
             ver, rel, inc = f.version()
         self.assertEqual(2, ver)
@@ -1110,10 +1100,10 @@ class MakeCDF(unittest.TestCase):
         cdf.lib = cdf.Library(libpath=cdf.lib, library=cdf._library)
         self.assertFalse(cdf.lib._explicit_backward)
         cdf.lib.set_backward(False)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=DeprecationWarning)
+        with spacepy_testing.assertDoesntWarn(
+                self, 'always', category=DeprecationWarning,
+                module=r'spacepy\.pycdf$'):
             cdf.CDF(self.testfspec, create=True).close()
-        self.assertEqual(0, len(w))
         with cdf.CDF(self.testfspec) as f:
             ver, rel, inc = f.version()
         self.assertEqual(3, ver)
@@ -1138,16 +1128,14 @@ class CDFTestsBase(unittest.TestCase):
 
 class CDFTests(CDFTestsBase):
     """Tests that involve an existing CDF, read or write"""
-    pth = os.path.dirname(os.path.abspath(__file__))
-    testmaster = os.path.join(pth, 'po_l1_cam_test.cdf')
+    testmaster = os.path.join(spacepy_testing.testsdir, 'po_l1_cam_test.cdf')
     testbase = 'test.cdf'
     expected_digest = '94515e62d38a31ad02f6d435274cbfe7'
 
 
 class ColCDFTests(CDFTestsBase):
     """Tests that involve an existing column-major CDF, read or write"""
-    pth = os.path.dirname(os.path.abspath(__file__))
-    testmaster = os.path.join(pth, 'po_l1_cam_testc.cdf')
+    testmaster = os.path.join(spacepy_testing.testsdir, 'po_l1_cam_testc.cdf')
     testbase = 'testc.cdf'
     expected_digest = '7728439e20bece4c0962a125373345bf'
 
@@ -1219,6 +1207,7 @@ class OpenCDF(CDFTests):
 
 class ReadCDF(CDFTests):
     """Tests that read an existing CDF, but do not modify it."""
+    longMessage = True
     testbase = 'test_ro.cdf'
     varnames = ['ATC', 'PhysRecNo', 'SpinNumbers', 'SectorNumbers',
                'RateScalerNames', 'SectorRateScalerNames',
@@ -2294,6 +2283,32 @@ class ReadCDF(CDFTests):
         #Repopulated
         self.assertEqual((10, True), self.cdf.attr_num(b'Instrument_type'))
 
+    def testReadUnsetPad(self):
+        """Test getting pad value on variable where it isn't set."""
+        self.assertIs(self.cdf['Epoch'].pad(), None)
+
+    def testPadNRV(self):
+        """Read pad value for NRV"""
+        # This wasn't explicitly set but that's what it gives
+        self.assertEqual(self.cdf['SectorNumbers'].pad(), ' P')
+
+    def testPrepare(self):
+        """Test data conversion to numpy arrays"""
+        # Data here are only prepared, CDF itself does not change
+        # Each test is variable name, input data, expected prepared data,
+        # expected dtype
+        tests = [('ATC',
+                  [datetime.datetime(1, 1, 1)],
+                  numpy.array([[31622400.0, 0]]), numpy.float64),
+                 ('MeanCharge',
+                  [1, 2], numpy.array([1., 2.]), numpy.float32)
+                 ]
+        for vname, inputs, expected, dtype in tests:
+            actual = self.cdf[vname]._prepare(inputs)
+            self.assertIs(type(actual), numpy.ndarray, vname)
+            self.assertEqual(actual.dtype, dtype, vname)
+            numpy.testing.assert_array_equal(actual, expected)
+
 
 class ReadColCDF(ColCDFTests):
     """Tests that read a column-major CDF, but do not modify it."""
@@ -2640,6 +2655,15 @@ class ChangeCDF(ChangeCDFBase):
                          comptype.value)
         self.assertEqual(8, compparam)
 
+    def testNewVarFromVarCompress(self):
+        """Create a new variable from a variable, change compression"""
+        zvar = self.cdf.new('newzvar1', compress=const.GZIP_COMPRESSION,
+                            data=self.cdf['SpinRateScalersCounts'])
+        comptype, compparam = zvar.compress()
+        self.assertEqual(const.GZIP_COMPRESSION.value,
+                         comptype.value)
+        self.assertEqual(5, compparam)
+
     def testNewVarFromdmarrayAssign(self):
         """Create a new variable by assigning from dmarray"""
         indata = datamodel.dmarray([1,2,3], dtype=numpy.int8,
@@ -2680,27 +2704,13 @@ class ChangeCDF(ChangeCDFBase):
             [[1, 2, 3], [4, 5, 6]], self.cdf['newzVar'][...])
 
     def testNewVarTime(self):
-        with warnings.catch_warnings(record=True) as w:
-            if sys.version_info[0:2] == (2, 7)\
-               and hasattr(cdf, '__warningregistry__'):
-                # filter 'always' is broken in Python 2.7
-                # https://stackoverflow.com/questions/56821539/
-                for k in cdf.__warningregistry__.keys():
-                    if k[0].startswith(
-                            'No type specified for time input') \
-                            and k[1] is DeprecationWarning:
-                        del cdf.__warningregistry__[k]
-                        break
-            warnings.simplefilter('always')
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'No type specified for time input\; assuming CDF_EPOCH\.'
+                r' This will change to TT2000 in the future, on systems which'
+                r' support it\.$',
+                DeprecationWarning, r'spacepy\.pycdf$'):
             self.cdf['newzVar'] = [datetime.datetime(2010, 1, 1)]
-        self.assertEqual(1, len(w))
-        self.assertEqual(
-            w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'No type specified for time input; assuming CDF_EPOCH.'
-            ' This will change to TT2000 in the future, on systems which'
-            ' support it.',
-            str(w[0].message))
         # For future
         #expected = cdf.const.CDF_TIME_TT2000.value if cdf.lib.supports_int8 \
         #           else cdf.const.CDF_EPOCH.value
@@ -2778,6 +2788,214 @@ class ChangeCDF(ChangeCDFBase):
         zVar.rv(True)
         self.assertTrue(zVar.rv())
 
+    def testChangeSparseRecordsPrev(self):
+        """Change sparse records mode to PREV"""
+        zVar = self.cdf.new('newvarSR', dims=[], type=const.CDF_INT4)
+        self.assertEqual(zVar.sparse(), const.NO_SPARSERECORDS)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        self.assertEqual(zVar.sparse(), const.PREV_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        # Arguments to use for assertWarngs, since used a lot....
+        aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                   r'spacepy\.pycdf$')
+        with spacepy_testing.assertWarns(*aw_args):
+            self.assertEqual(zVar[1], 1);
+        with spacepy_testing.assertWarns(*aw_args):
+            self.assertEqual(zVar[2], 1);
+    
+    def testSparseMultidimPrev(self):
+        """test multi-dimensional sparse record variables, PREV"""
+        zVar = self.cdf.new('sr', dims=[2], type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[0] = [1, 2];
+        zVar[3] = [3, 4];
+        # Arguments to use for assertWarngs, since used a lot....
+        aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                   r'spacepy\.pycdf$')
+        with spacepy_testing.assertWarns(*aw_args):
+            numpy.testing.assert_array_equal(
+                [[1, 2], [1, 2], [1, 2], [3, 4]],
+                zVar[...])
+
+    def testSparseRecordsReadAll(self):
+        """Read all records from a sparse variable"""
+        zVar = self.cdf.new('newvarSR', type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        self.assertEqual(4, len(zVar))
+        # Arguments to use for assertWarngs, since used a lot....
+        aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                   r'spacepy\.pycdf$')
+        with spacepy_testing.assertWarns(*aw_args):
+            numpy.testing.assert_array_equal(zVar[...],
+                                             [1, 1, 1, 2]);
+
+    def testSparseReadOffEnd(self):
+        """Read past the end of a sparse variable"""
+        zVar = self.cdf.new('newvarSR', type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[...] = [1, 2, 3]
+        hs = cdf._Hyperslice(zVar, slice(None, 4, None))
+        # Make sure the slice sizing is proper before read
+        self.assertEqual([0], hs.starts)
+        self.assertEqual([4], hs.counts)
+        with spacepy_testing.assertWarns(
+                self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                r'spacepy\.pycdf$'):
+            numpy.testing.assert_array_equal(zVar[:4],
+                                             [1, 2, 3, 3]);
+
+    def testChangeSparseRecordsPad(self):
+        """Change sparse records mode to PAD"""
+        zVar = self.cdf.new('newvarSRPad', dims=[], type=const.CDF_INT4)
+        zVar.sparse(const.PAD_SPARSERECORDS)
+        self.assertEqual(zVar.sparse(), const.PAD_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        pad = zVar.pad()
+        # Arguments to use for assertWarngs, since used a lot....
+        aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                   r'spacepy\.pycdf$')
+        with spacepy_testing.assertWarns(*aw_args):
+            self.assertEqual(zVar[1], pad);
+        with spacepy_testing.assertWarns(*aw_args):
+            self.assertEqual(zVar[2], pad);
+        pad = zVar.pad(123)
+        with spacepy_testing.assertWarns(*aw_args):
+            self.assertEqual(zVar[1], pad);
+        with spacepy_testing.assertWarns(*aw_args):
+            self.assertEqual(zVar[2], pad);
+
+    def testSparseMultidimPad(self):
+        """test multi-dimensional sparse record variables, PAD"""
+        zVar = self.cdf.new('sr', dims=[2], type=const.CDF_INT4)
+        zVar.sparse(const.PAD_SPARSERECORDS)
+        zVar[0] = [1, 2];
+        zVar[3] = [3, 4];
+        pad = zVar.pad(20)
+        # Arguments to use for assertWarngs, since used a lot....
+        aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                   r'spacepy\.pycdf$')
+        with spacepy_testing.assertWarns(*aw_args):
+            numpy.testing.assert_array_equal(
+                [[1, 2], [20, 20], [20, 20], [3, 4]],
+                zVar[...])
+
+    def testSparsePrevInsert(self):
+        """Insert records in sparse records previous mode"""
+        zVar = self.cdf.new('newvarSR', type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        with self.assertRaises(NotImplementedError) as cm:
+            zVar.insert(2, 99)
+        self.assertEqual('Sparse records do not support insertion.',
+                         str(cm.exception))
+        # Following is test for if this did work
+        # Arguments to use for assertWarngs, since used a lot....
+        #aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+        #           r'spacepy\.pycdf$')
+        #with spacepy_testing.assertWarns(*aw_args):
+        #    numpy.testing.assert_array_equal(zVar[0:5],
+        #                                     [1, 1, 99, 99, 2])
+
+    def testSparsePrevSingle(self):
+        """Delete one record in sparse records previous mode"""
+        zVar = self.cdf.new('newvarSR', type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        zVar[5] = 3;
+        del zVar[3]
+        # Arguments to use for assertWarngs, since used a lot....
+        aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+                   r'spacepy\.pycdf$')
+        with spacepy_testing.assertWarns(*aw_args):
+            numpy.testing.assert_array_equal(zVar[0:6],
+                                             [1, 1, 1, 1, 1, 3])
+
+    def testSparsePrevDelete(self):
+        """Delete records in sparse records previous mode"""
+        zVar = self.cdf.new('newvarSR', type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        zVar[5] = 3;
+        with self.assertRaises(NotImplementedError) as cm:
+            del zVar[3:5]
+        self.assertEqual('Sparse records do not support multi-record delete.',
+                         str(cm.exception))
+        # Following is test for if this did work
+        # Arguments to use for assertWarngs, since used a lot....
+        #aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+        #           r'spacepy\.pycdf$')
+        #with spacepy_testing.assertWarns(*aw_args):
+        #    numpy.testing.assert_array_equal(zVar[0:4],
+        #                                     [1, 1, 1, 3])
+
+    def testSparsePrevTruncate(self):
+        """Truncate records in sparse records previous mode"""
+        zVar = self.cdf.new('newvarSR', type=const.CDF_INT4)
+        zVar.sparse(const.PREV_SPARSERECORDS)
+        zVar[0] = 1;
+        zVar[3] = 2;
+        zVar[4] = 3;
+        with self.assertRaises(NotImplementedError) as cm:
+            zVar[0:] = [100, 101, 102]
+        self.assertEqual('Sparse records do not support truncation on write.',
+                         str(cm.exception))
+        # Following is test for if this did work
+        # Arguments to use for assertWarngs, since used a lot....
+        #aw_args = (self, 'always', r'VIRTUAL_RECORD_DATA', cdf.CDFWarning,
+        #           r'spacepy\.pycdf$')
+        #with spacepy_testing.assertWarns(*aw_args):
+        #    numpy.testing.assert_array_equal(zVar[0:4],
+        #                                     [1000, 101, 102, 3])
+
+    def testSparseOnCreate(self):
+        """Specify sparseness when creating a variable"""
+        zVar = self.cdf.new('newvar', data=[1, 2, 3, 4],
+                            sparse=const.PAD_SPARSERECORDS, pad=99)
+        self.assertEqual(const.PAD_SPARSERECORDS, zVar.sparse())
+        self.assertEqual(99, zVar.pad())
+        with spacepy_testing.assertWarns(self, 'always', r'VIRTUAL_RECORD_DATA',
+                                         cdf.CDFWarning, r'spacepy\.pycdf$'):
+            numpy.testing.assert_array_equal(zVar[0:5], [1, 2, 3, 4, 99])
+
+    def testSparseCopy(self):
+        """Make sure sparseness carries through to VarCopy"""
+        zVar = self.cdf.new('newvar', data=[1, 2, 3, 4],
+                            sparse=const.PAD_SPARSERECORDS, pad=99)
+        cp = zVar.copy()
+        self.assertEqual(const.PAD_SPARSERECORDS, cp.sparse())
+        self.assertEqual(99, cp.pad())
+        numpy.testing.assert_array_equal(zVar[...], [1, 2, 3, 4])
+
+    def testNRVWritePad(self):
+        """Write pad value for NRV"""
+        v = self.cdf['SectorNumbers']
+        v.pad('Q')
+        self.assertEqual('Q', v.pad())
+
+    def testNRVSparse(self):
+        """Make NRV sparse variable"""
+        v = self.cdf.new('newvar', recVary=False, type=const.CDF_INT1)
+        with self.assertRaises(cdf.CDFError) as cm:
+            v.sparse(const.PAD_SPARSERECORDS)
+        self.assertEqual("CANNOT_SPARSERECORDS: Sparse records can't be"
+                         " set/modified for the variable.", str(cm.exception))
+        self.assertEqual(const.CANNOT_SPARSERECORDS, cm.exception.status)
+
+    def testSparseNonConst(self):
+        """Set sparseness without using the const module"""
+        v = self.cdf.new('newvar', type=const.CDF_INT1)
+        v.sparse(ctypes.c_long(0))
+        self.assertEqual(0, v.sparse().value)
+        v.sparse(0)
+        self.assertEqual(0, v.sparse().value)
+
     def testChecksum(self):
         """Change checksumming on the CDF"""
         self.cdf.checksum(True)
@@ -2820,15 +3038,10 @@ class ChangeCDF(ChangeCDFBase):
         'about every portion of the anatomy.'
         if not str is bytes:
             msg = msg.encode('ascii')
-        with warnings.catch_warnings(record=True) as w:
-            warnings.filterwarnings('always', 'ATTR_NAME_TRUNC.*',
-                                    cdf.CDFWarning, '^spacepy\\.pycdf')
+        with spacepy_testing.assertWarns(self, 'always', r'ATTR_NAME_TRUNC',
+                                         cdf.CDFWarning, r'spacepy\.pycdf$'):
             self.cdf._call(cdf.const.CREATE_, cdf.const.ATTR_, msg,
                            cdf.const.GLOBAL_SCOPE, ctypes.byref(attrnum))
-        self.assertEqual(len(w), 1)
-        self.assertTrue(isinstance(w[0].message, cdf.CDFWarning))
-        self.assertEqual('ATTR_NAME_TRUNC: Attribute name truncated.',
-                         str(w[0].message))
 
     def testAssignEmptyList(self):
         """Assign an empty list to a variable"""
@@ -2840,7 +3053,7 @@ class ChangeCDF(ChangeCDFBase):
         self.cdf['ATC'] = []
         data = self.cdf['ATC'][...]
         self.assertEqual((0,), data.shape)
-        self.assertEqual(numpy.object, data.dtype)
+        self.assertEqual(object, data.dtype)
 
     def testCopyVariable(self):
         """Copy one variable to another"""
@@ -3559,15 +3772,11 @@ class ChangeAttr(ChangeCDFBase):
                    'b': 'hello',
                    }
         attrlist = self.cdf['ATC'].attrs
-        with warnings.catch_warnings(record=True) as w:
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'from_dict is deprecated and will be removed\. Use clone\.$',
+                DeprecationWarning, r'spacepy\.pycdf$'):
             attrlist.from_dict(indict)
-            self.assertEqual(1, len(w))
-            for curr_warn in w:
-                self.assertTrue(isinstance(curr_warn.message,
-                                           DeprecationWarning))
-                self.assertEqual(
-                    'from_dict is deprecated and will be removed. Use clone.',
-                    str(curr_warn.message))
         self.assertEqual(['CATDESC', 'b'], sorted(attrlist.keys()))
         numpy.testing.assert_array_equal(indict['CATDESC'],
                                          attrlist['CATDESC'])
@@ -3602,28 +3811,14 @@ class ChangeAttr(ChangeCDFBase):
         self.cdf['ATC'].attrs['testtime'] = datetime.datetime(2010, 1, 1)
         expected = cdf.const.CDF_EPOCH16.value # Matches var
         self.assertEqual(expected, self.cdf['ATC'].attrs.type('testtime'))
-        with warnings.catch_warnings(record=True) as w:
-            if sys.version_info[0:2] == (2, 7)\
-               and hasattr(cdf, '__warningregistry__'):
-                # filter 'always' is broken in Python 2.7
-                # https://stackoverflow.com/questions/56821539/
-                for k in cdf.__warningregistry__.keys():
-                    if k[0].startswith(
-                            'Assuming CDF_') \
-                            and k[1] is DeprecationWarning:
-                        del cdf.__warningregistry__[k]
-                        break
-            warnings.simplefilter('always')
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'Assuming CDF_EPOCH for time input\.'
+                r' This will change to TT2000 in the future, on systems which'
+                r' support it\.$',
+                DeprecationWarning, r'spacepy\.pycdf$'):
             self.cdf['SectorRateScalersCounts'].attrs['testtime'] \
                 = datetime.datetime(2010, 1, 1)
-        self.assertEqual(1, len(w))
-        self.assertEqual(
-            w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'Assuming CDF_EPOCH for time input.'
-            ' This will change to TT2000 in the future, on systems which'
-            ' support it.',
-            str(w[0].message))
         # For future
         #expected = cdf.const.CDF_TIME_TT2000.value if cdf.lib.supports_int8 \
         #           else cdf.const.CDF_EPOCH.value
@@ -3634,27 +3829,13 @@ class ChangeAttr(ChangeCDFBase):
 
     def testgAttrsAssignTimeType(self):
         """Assign a time type to a gAttr"""
-        with warnings.catch_warnings(record=True) as w:
-            if sys.version_info[0:2] == (2, 7)\
-               and hasattr(cdf, '__warningregistry__'):
-                # filter 'always' is broken in Python 2.7
-                # https://stackoverflow.com/questions/56821539/
-                for k in cdf.__warningregistry__.keys():
-                    if k[0].startswith(
-                            'Assuming') \
-                            and k[1] is DeprecationWarning:
-                        del cdf.__warningregistry__[k]
-                        break
-            warnings.simplefilter('always')
+        with spacepy_testing.assertWarns(
+                self, 'always',
+                r'Assuming CDF_EPOCH for time input\.'
+                r' This will change to TT2000 in the future, on systems which'
+                r' support it\.$',
+                DeprecationWarning, r'spacepy\.pycdf$'):
             self.cdf.attrs['testtime'] = datetime.datetime(2010, 1, 1)
-        self.assertEqual(1, len(w))
-        self.assertEqual(
-            w[0].category, DeprecationWarning)
-        self.assertEqual(
-            'Assuming CDF_EPOCH for time input.'
-            ' This will change to TT2000 in the future, on systems which'
-            ' support it.',
-            str(w[0].message))
         # For future
         #expected = cdf.const.CDF_TIME_TT2000.value if cdf.lib.supports_int8 \
         #           else cdf.const.CDF_EPOCH.value
